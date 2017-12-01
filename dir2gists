@@ -1,0 +1,68 @@
+#! /bin/bash
+#
+# NAME
+#      dir2gists — publish local directories as gists
+#
+# DESCRIPTION
+#      Turns child directories of the current working directory into github
+#      gists for re-use in blog posts, medium articles, etc.
+#
+#      Organize folders within the working directory as:
+#
+#        gists
+#        ├── gist-1
+#        │   └── code.js
+#       ...
+#        └── gist-n
+#            └── example.js
+#
+#      Then run the script!
+#
+# EXAMPLES
+#           cd gists && ./dir2gists
+#
+# MIT  2017, rj@rjzaworski.com
+set -euo pipefail
+IFS=$'\n\t'
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+require_dep () {
+  local dep=$1
+  local message=${2:-"$dep not available; bailing out."}
+  which "$dep" > /dev/null || {
+    echo $message
+    exit 2
+  }
+}
+
+print_result() {
+  local delim=$1
+  local name=$(basename $(pwd))
+  local id=$(git remote get-url origin \
+    | cut -d: -f2 \
+    | cut -d. -f1)
+  echo "${name} ${delim} https://gist.github.com/${id}"
+}
+
+sync_gist() {
+  local dir=$(pwd)
+  if [[ -d .git ]]; then
+    git diff-index --quiet HEAD -- && {
+      print_result '=='
+    } || {
+      git commit -am 'Updates gist'
+      git push
+      print_result '=>'
+    }
+  else
+    gistup --private --open=0 > /dev/null
+    print_result '+>'
+  fi
+}
+
+require_dep gistup 'Requires gistup: $ npm install -g gistup'
+
+find * -maxdepth 0 -type d \
+  | while read dir; do cd $dir; sync_gist; cd "$DIR"; done \
+  | column -t
